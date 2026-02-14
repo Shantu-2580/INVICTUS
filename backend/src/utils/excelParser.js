@@ -70,16 +70,21 @@ const getColumnHeaders = (workbook, sheetName) => {
 
 /**
  * Analyze Excel file structure
- * @param {string} filePath - Path to Excel file
+ * @param {string|object} source - Path to Excel file OR Workbook object
  * @returns {object} - File structure analysis
  */
-const analyzeExcelStructure = (filePath) => {
+const analyzeExcelStructure = (source) => {
     try {
-        const workbook = readExcelFile(filePath);
+        let workbook;
+        if (typeof source === 'string') {
+            workbook = readExcelFile(source);
+        } else {
+            workbook = source;
+        }
         const sheetNames = getSheetNames(workbook);
 
         const analysis = {
-            fileName: path.basename(filePath),
+            fileName: typeof source === 'string' ? path.basename(source) : 'Workbook Object',
             totalSheets: sheetNames.length,
             sheets: []
         };
@@ -118,63 +123,95 @@ const detectColumnMapping = (headers) => {
         quantity_per_pcb: null
     };
 
-    // Normalize headers for matching
     const normalizedHeaders = headers.map(h =>
-        String(h).toLowerCase().trim()
+        String(h || '').toLowerCase().trim()
     );
 
     normalizedHeaders.forEach((header, index) => {
         const original = headers[index];
 
-        // Component name patterns
-        if (header.includes('component') && header.includes('name')) {
-            mapping.component_name = original;
-        } else if (header.includes('item') && header.includes('name')) {
-            mapping.component_name = original;
-        } else if (header === 'component' || header === 'item') {
+        /* =========================
+           COMPONENT NAME
+        ========================= */
+
+        if (
+            header.includes('component') ||
+            header.includes('description') ||
+            header.includes('item') ||
+            header.includes('material') ||
+            header.includes('change') // Matches "Component Change"
+        ) {
             mapping.component_name = original;
         }
 
-        // Part number patterns
-        if (header.includes('part') && header.includes('number')) {
-            mapping.part_number = original;
-        } else if (header.includes('part') && header.includes('no')) {
-            mapping.part_number = original;
-        } else if (header === 'partno' || header === 'part_no') {
-            mapping.part_number = original;
-        } else if (header.includes('code') || header.includes('sku')) {
+        /* =========================
+           PART NUMBER
+        ========================= */
+
+        if (
+            header.includes('part') ||
+            header.includes('code') ||
+            header.includes('sku') ||
+            header.includes('material code') ||
+            header.includes('item code')
+        ) {
             mapping.part_number = original;
         }
 
-        // Stock patterns
-        if (header.includes('stock') || header.includes('inventory')) {
-            mapping.current_stock = original;
-        } else if (header.includes('qty') && !header.includes('required')) {
-            mapping.current_stock = original;
-        } else if (header === 'quantity' && !header.includes('required')) {
+        /* =========================
+           CURRENT STOCK
+        ========================= */
+
+        if (
+            header.includes('stock') ||
+            header.includes('inventory') ||
+            header.includes('available') ||
+            header.includes('balance') ||
+            header.includes('bal qty') ||
+            header === 'qty'
+        ) {
             mapping.current_stock = original;
         }
 
-        // Monthly required patterns
-        if (header.includes('monthly') && header.includes('required')) {
+        /* =========================
+           MONTHLY REQUIRED
+        ========================= */
+
+        if (
+            (header.includes('monthly') ||
+                header.includes('required') ||
+                header.includes('requirement') ||
+                header.includes('consumption') ||
+                header.includes('req qty')) &&
+            !header.includes('entry') && // Exclude "Consumption Entry"
+            !header.includes('component') // Exclude "Component Consumption"
+        ) {
             mapping.monthly_required_quantity = original;
-        } else if (header.includes('required') && header.includes('qty')) {
-            mapping.monthly_required_quantity = original;
         }
 
-        // PCB name patterns
-        if (header.includes('pcb') && header.includes('name')) {
-            mapping.pcb_name = original;
-        } else if (header === 'pcb' || header === 'board') {
+        /* =========================
+           PCB NAME
+        ========================= */
+
+        if (
+            header.includes('pcb') ||
+            header.includes('board') ||
+            header.includes('assembly') ||
+            header.includes('part code') // "Part Code" often refers to the PCB Model in these files
+        ) {
             mapping.pcb_name = original;
         }
 
-        // Quantity per PCB patterns
-        if (header.includes('qty') && header.includes('pcb')) {
-            mapping.quantity_per_pcb = original;
-        } else if (header.includes('per') && header.includes('pcb')) {
-            mapping.quantity_per_pcb = original;
-        } else if (header.includes('usage') && header.includes('pcb')) {
+        /* =========================
+           QTY PER PCB
+        ========================= */
+
+        if (
+            header.includes('per pcb') ||
+            header.includes('usage') ||
+            header.includes('qty/pcb') ||
+            header.includes('quantity per pcb')
+        ) {
             mapping.quantity_per_pcb = original;
         }
     });
@@ -182,15 +219,21 @@ const detectColumnMapping = (headers) => {
     return mapping;
 };
 
+
 /**
  * Extract components data from Excel
- * @param {string} filePath - Path to Excel file
+ * @param {string|object} source - Path to Excel file OR Workbook object
  * @param {string} sheetName - Sheet name to extract from
  * @returns {array} - Array of component objects
  */
-const extractComponents = (filePath, sheetName) => {
+const extractComponents = (source, sheetName) => {
     try {
-        const workbook = readExcelFile(filePath);
+        let workbook;
+        if (typeof source === 'string') {
+            workbook = readExcelFile(source);
+        } else {
+            workbook = source;
+        }
         const headers = getColumnHeaders(workbook, sheetName);
         const data = sheetToJSON(workbook, sheetName);
         const mapping = detectColumnMapping(headers);
@@ -209,6 +252,11 @@ const extractComponents = (filePath, sheetName) => {
                 monthly_required_quantity: mapping.monthly_required_quantity ?
                     parseFloat(row[mapping.monthly_required_quantity]) || 0 : 0
             };
+
+            // Fallback for name
+            if (!component.name && component.part_number) {
+                component.name = component.part_number;
+            }
 
             // Only add if we have at least name or part number
             if (component.name || component.part_number) {
@@ -229,13 +277,18 @@ const extractComponents = (filePath, sheetName) => {
 
 /**
  * Extract BOM data (PCB-Component mappings)
- * @param {string} filePath - Path to Excel file
+ * @param {string|object} source - Path to Excel file OR Workbook object
  * @param {string} sheetName - Sheet name
  * @returns {array} - Array of BOM mappings
  */
-const extractBOM = (filePath, sheetName) => {
+const extractBOM = (source, sheetName) => {
     try {
-        const workbook = readExcelFile(filePath);
+        let workbook;
+        if (typeof source === 'string') {
+            workbook = readExcelFile(source);
+        } else {
+            workbook = source;
+        }
         const headers = getColumnHeaders(workbook, sheetName);
         const data = sheetToJSON(workbook, sheetName);
         const mapping = detectColumnMapping(headers);
@@ -245,17 +298,25 @@ const extractBOM = (filePath, sheetName) => {
         for (const row of data) {
             if (!row || Object.keys(row).length === 0) continue;
 
-            const bomEntry = {
-                pcb_name: mapping.pcb_name ? row[mapping.pcb_name] : null,
-                component_identifier: mapping.component_name ?
-                    row[mapping.component_name] :
-                    (mapping.part_number ? row[mapping.part_number] : null),
-                quantity_per_pcb: mapping.quantity_per_pcb ?
-                    parseInt(row[mapping.quantity_per_pcb]) || 1 : 1
-            };
+            const pcbName = mapping.pcb_name ? row[mapping.pcb_name] : (sheetName || null);
+            let componentIdentifier = mapping.component_name ?
+                row[mapping.component_name] :
+                (mapping.part_number ? row[mapping.part_number] : null);
 
-            if (bomEntry.pcb_name && bomEntry.component_identifier) {
-                bomMappings.push(bomEntry);
+            const quantity = mapping.quantity_per_pcb ?
+                parseInt(row[mapping.quantity_per_pcb]) || 1 : 1;
+
+            if (pcbName && componentIdentifier) {
+                // Handle slash-separated components (e.g. "C1/C2/R1")
+                const subComponents = String(componentIdentifier).split('/').map(s => s.trim()).filter(s => s.length > 0);
+
+                for (const subComp of subComponents) {
+                    bomMappings.push({
+                        pcb_name: pcbName,
+                        component_identifier: subComp,
+                        quantity_per_pcb: 1 // Default to 1 per split item, unless we want to divide the total? Usually it means 1 of each.
+                    });
+                }
             }
         }
 

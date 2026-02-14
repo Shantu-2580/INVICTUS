@@ -34,6 +34,8 @@ CREATE INDEX idx_components_part_number ON components(part_number);
 CREATE TABLE pcbs (
     id SERIAL PRIMARY KEY,
     pcb_name VARCHAR(255) UNIQUE NOT NULL,
+    revision VARCHAR(50),
+    description TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

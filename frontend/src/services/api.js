@@ -1,41 +1,48 @@
-// Real API Service - Connects to Backend
 const API_BASE_URL = 'http://localhost:5000/api';
 
 class RealAPI {
-  constructor() {
-    this.token = localStorage.getItem('authToken');
-  }
 
-  // Helper method to get headers with auth token
+  // ===============================
+  // Headers
+  // ===============================
+
   getHeaders(includeAuth = true) {
     const headers = {
       'Content-Type': 'application/json',
     };
 
-    if (includeAuth && this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
+    const token = localStorage.getItem('token');
+
+    if (includeAuth && token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
     return headers;
   }
 
-  // Helper method to handle responses
+  // ===============================
+  // Response Handler
+  // ===============================
+
   async handleResponse(response) {
     const data = await response.json();
 
     if (!response.ok) {
       if (response.status === 401) {
-        // Token expired or invalid
         this.logout();
-        throw new Error('Authentication required. Please login again.');
+        throw new Error('Authentication required.');
       }
+
       throw new Error(data.message || 'API request failed');
     }
 
     return data;
   }
 
+  // ===============================
   // Authentication
+  // ===============================
+
   async login(email, password) {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
       method: 'POST',
@@ -46,194 +53,173 @@ class RealAPI {
     const data = await this.handleResponse(response);
 
     if (data.success && data.data.token) {
-      this.token = data.data.token;
-      localStorage.setItem('authToken', this.token);
+      localStorage.setItem('token', data.data.token);
       localStorage.setItem('user', JSON.stringify(data.data.user));
     }
 
     return data;
-  }
-
-  async register(name, email, password) {
-    const response = await fetch(`${API_BASE_URL}/auth/register`, {
-      method: 'POST',
-      headers: this.getHeaders(false),
-      body: JSON.stringify({ name, email, password, role: 'admin' })
-    });
-
-    const data = await this.handleResponse(response);
-
-    if (data.success && data.data.token) {
-      this.token = data.data.token;
-      localStorage.setItem('authToken', this.token);
-      localStorage.setItem('user', JSON.stringify(data.data.user));
-    }
-
-    return data;
-  }
-
-  async getProfile() {
-    const response = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: this.getHeaders()
-    });
-
-    return this.handleResponse(response);
   }
 
   logout() {
-    this.token = null;
-    localStorage.removeItem('authToken');
+    localStorage.removeItem('token');
     localStorage.removeItem('user');
-    window.location.href = '/login';
   }
 
+  // ===============================
   // Components
+  // ===============================
+
   async getComponents() {
     const response = await fetch(`${API_BASE_URL}/components`, {
       headers: this.getHeaders()
     });
 
     const data = await this.handleResponse(response);
-    return data.data.components || [];
+
+    return (data.data.components || []).map(comp => ({
+      id: comp.id,
+      name: comp.name,
+      partNumber: comp.part_number,
+      currentStock: comp.current_stock || 0,
+      monthlyRequired: comp.monthly_required_quantity || 0
+    }));
   }
 
-  async addComponent(component) {
-    const response = await fetch(`${API_BASE_URL}/components`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        name: component.name,
-        part_number: component.partNumber,
-        current_stock: component.currentStock,
-        monthly_required_quantity: component.monthlyRequired
-      })
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.component;
-  }
-
-  async updateComponent(id, updates) {
-    const response = await fetch(`${API_BASE_URL}/components/${id}`, {
-      method: 'PUT',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        name: updates.name,
-        part_number: updates.partNumber,
-        current_stock: updates.currentStock,
-        monthly_required_quantity: updates.monthlyRequired
-      })
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.component;
-  }
-
-  async deleteComponent(id) {
-    const response = await fetch(`${API_BASE_URL}/components/${id}`, {
-      method: 'DELETE',
-      headers: this.getHeaders()
-    });
-
-    await this.handleResponse(response);
-    return true;
-  }
-
+  // ===============================
   // PCBs
+  // ===============================
+
   async getPCBs() {
     const response = await fetch(`${API_BASE_URL}/pcbs`, {
       headers: this.getHeaders()
     });
 
     const data = await this.handleResponse(response);
-    return data.data.pcbs || [];
+
+    return (data.data.pcbs || []).map(pcb => ({
+      id: pcb.id,
+      name: pcb.pcb_name,
+      revision: pcb.revision,
+      description: pcb.description
+    }));
   }
 
-  async addPCB(pcb) {
+  /**
+   * Add new PCB
+   * POST /api/pcbs
+   */
+  async addPCB(pcbData) {
     const response = await fetch(`${API_BASE_URL}/pcbs`, {
       method: 'POST',
       headers: this.getHeaders(),
       body: JSON.stringify({
-        pcb_name: pcb.name
+        pcb_name: pcbData.name,
+        revision: pcbData.revision,
+        description: pcbData.description
       })
     });
 
     const data = await this.handleResponse(response);
-    return data.data.pcb;
+
+    // Map response back to frontend format
+    return {
+      ...data,
+      data: {
+        pcb: {
+          id: data.data.pcb.id,
+          name: data.data.pcb.pcb_name,
+          revision: data.data.pcb.revision,
+          description: data.data.pcb.description
+        }
+      }
+    };
   }
 
-  async deletePCB(id) {
-    const response = await fetch(`${API_BASE_URL}/pcbs/${id}`, {
-      method: 'DELETE',
-      headers: this.getHeaders()
-    });
-
-    await this.handleResponse(response);
-    return true;
-  }
-
-  // BOMs
+  /**
+   * Get all BOMs (Bill of Materials for all PCBs)
+   * Fetches BOM entries by getting components for each PCB
+   */
   async getBOMs() {
     const pcbs = await this.getPCBs();
     const allBOMs = [];
 
     for (const pcb of pcbs) {
-      const response = await fetch(`${API_BASE_URL}/pcbs/${pcb.id}/components`, {
-        headers: this.getHeaders()
-      });
-
+      const response = await fetch(
+        `${API_BASE_URL}/pcbs/${pcb.id}/components`,
+        { headers: this.getHeaders() }
+      );
       const data = await this.handleResponse(response);
-      const components = data.data.components || [];
 
-      components.forEach(comp => {
-        allBOMs.push({
-          id: comp.mapping_id,
-          pcbId: pcb.id,
-          componentId: comp.component_id,
-          quantity: comp.quantity_per_pcb
-        });
-      });
+      // Map to frontend BOM format
+      const pcbBOMs = (data.data.components || []).map(comp => ({
+        id: comp.mapping_id,
+        pcbId: pcb.id,
+        componentId: comp.component_id,
+        quantity: comp.quantity_per_pcb
+      }));
+
+      allBOMs.push(...pcbBOMs);
     }
 
     return allBOMs;
   }
 
-  async addBOM(bom) {
-    const response = await fetch(`${API_BASE_URL}/pcbs/${bom.pcbId}/components`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        component_id: bom.componentId,
-        quantity_per_pcb: bom.quantity
-      })
-    });
+  /**
+   * Add component to PCB BOM
+   * POST /api/pcbs/:pcbId/components
+   */
+  async addBOM(bomData) {
+    const response = await fetch(
+      `${API_BASE_URL}/pcbs/${bomData.pcbId}/components`,
+      {
+        method: 'POST',
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          component_id: bomData.componentId,
+          quantity_per_pcb: bomData.quantity
+        })
+      }
+    );
 
-    const data = await this.handleResponse(response);
-    return {
-      id: data.data.mapping.id,
-      pcbId: bom.pcbId,
-      componentId: bom.componentId,
-      quantity: bom.quantity
-    };
+    return this.handleResponse(response);
   }
 
-  async deleteBOM(id, pcbId, componentId) {
-    const response = await fetch(`${API_BASE_URL}/pcbs/${pcbId}/components/${componentId}`, {
-      method: 'DELETE',
-      headers: this.getHeaders()
-    });
+  /**
+   * Delete component from PCB BOM
+   * DELETE /api/pcbs/:pcbId/components/:componentId
+   * Note: We need to fetch the BOM first to get pcbId and componentId
+   */
+  async deleteBOM(bomId) {
+    // Get all BOMs to find the one we want to delete
+    const boms = await this.getBOMs();
+    const bom = boms.find(b => b.id === bomId);
 
-    await this.handleResponse(response);
-    return true;
+    if (!bom) {
+      throw new Error('BOM entry not found');
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/pcbs/${bom.pcbId}/components/${bom.componentId}`,
+      {
+        method: 'DELETE',
+        headers: this.getHeaders()
+      }
+    );
+
+    return this.handleResponse(response);
   }
 
+  // ===============================
   // Productions
+  // ===============================
+
   async getProductions() {
     const response = await fetch(`${API_BASE_URL}/production`, {
       headers: this.getHeaders()
     });
 
     const data = await this.handleResponse(response);
+
     return (data.data.productionLogs || []).map(log => ({
       id: log.id,
       pcbId: log.pcb_id,
@@ -243,139 +229,66 @@ class RealAPI {
     }));
   }
 
-  async addProduction(production) {
-    const response = await fetch(`${API_BASE_URL}/production`, {
-      method: 'POST',
-      headers: this.getHeaders(),
-      body: JSON.stringify({
-        pcb_id: production.pcbId,
-        quantity_produced: production.quantity
-      })
-    });
-
-    const data = await this.handleResponse(response);
-    return {
-      id: data.data.productionLog.id,
-      pcbId: data.data.productionLog.pcb_id,
-      pcbName: data.data.pcb_name,
-      quantity: data.data.productionLog.quantity_produced,
-      timestamp: data.data.productionLog.produced_at
-    };
-  }
-
+  // ===============================
   // Procurements
+  // ===============================
+
   async getProcurements() {
-    const response = await fetch(`${API_BASE_URL}/analytics/procurement-alerts?status=open`, {
-      headers: this.getHeaders()
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/analytics/procurement-alerts?status=open`,
+      { headers: this.getHeaders() }
+    );
 
     const data = await this.handleResponse(response);
-    return (data.data.procurementAlerts || []).map(alert => ({
-      id: alert.id,
-      componentId: alert.component_id,
-      componentName: alert.component_name,
-      currentStock: alert.current_stock,
-      threshold: alert.monthly_required_quantity * 0.2,
-      triggerDate: alert.trigger_date,
-      status: alert.status,
-      notes: ''
-    }));
+
+    return data.data.procurementAlerts || [];
   }
 
-  async updateProcurement(id, updates) {
-    if (updates.status === 'resolved') {
-      const response = await fetch(`${API_BASE_URL}/analytics/procurement-alerts/${id}/resolve`, {
-        method: 'PUT',
-        headers: this.getHeaders()
-      });
+  // ===============================
+  // 🔥 Excel Import Section
+  // ===============================
 
-      const data = await this.handleResponse(response);
-      return data.data.procurementAlert;
-    }
-    return null;
-  }
-
-  // Analytics
-  async getConsumptionSummary(startDate, endDate) {
-    let url = `${API_BASE_URL}/analytics/consumption-summary`;
-    if (startDate && endDate) {
-      url += `?startDate=${startDate}&endDate=${endDate}`;
-    }
-
-    const response = await fetch(url, {
-      headers: this.getHeaders()
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.consumptionSummary || [];
-  }
-
-  async getTopConsumed(limit = 10) {
-    const response = await fetch(`${API_BASE_URL}/analytics/top-consumed?limit=${limit}`, {
-      headers: this.getHeaders()
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.topComponents || [];
-  }
-
-  async getLowStock() {
-    const response = await fetch(`${API_BASE_URL}/analytics/low-stock`, {
-      headers: this.getHeaders()
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.lowStockComponents || [];
-  }
-
-  async getProductionStats(startDate, endDate) {
-    let url = `${API_BASE_URL}/analytics/production-stats`;
-    if (startDate && endDate) {
-      url += `?startDate=${startDate}&endDate=${endDate}`;
-    }
-
-    const response = await fetch(url, {
-      headers: this.getHeaders()
-    });
-
-    const data = await this.handleResponse(response);
-    return data.data.productionStats || [];
-  }
-
-  // Excel Import
   async getImportFiles() {
     const response = await fetch(`${API_BASE_URL}/import/files`, {
       headers: this.getHeaders()
     });
 
-    const data = await this.handleResponse(response);
-    return data.data.files || [];
+    return this.handleResponse(response);
   }
 
   async previewExcelFile(filename) {
-    const response = await fetch(`${API_BASE_URL}/import/preview/${encodeURIComponent(filename)}`, {
-      headers: this.getHeaders()
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/import/preview/${encodeURIComponent(filename)}`,
+      {
+        headers: this.getHeaders()
+      }
+    );
 
     return this.handleResponse(response);
   }
 
   async importExcelData(filename, sheetName, importType = 'auto') {
     const response = await fetch(`${API_BASE_URL}/import/excel`, {
-      method: 'POST',
+      method: 'POST', // ✅ MUST be POST
       headers: this.getHeaders(),
-      body: JSON.stringify({ filename, sheetName, importType })
+      body: JSON.stringify({
+        filename,
+        sheetName,
+        importType
+      })
     });
 
     return this.handleResponse(response);
   }
 
-  // Check if user is authenticated
+  // ===============================
+  // Helpers
+  // ===============================
+
   isAuthenticated() {
-    return !!this.token;
+    return !!localStorage.getItem('token');
   }
 
-  // Get current user
   getCurrentUser() {
     const userStr = localStorage.getItem('user');
     return userStr ? JSON.parse(userStr) : null;

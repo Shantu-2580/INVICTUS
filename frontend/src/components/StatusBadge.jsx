@@ -26,6 +26,9 @@ const StatusBadge = ({ status, label }) => {
 };
 
 export const getStockStatus = (currentStock, monthlyRequired) => {
+  if (!monthlyRequired || monthlyRequired === 0) {
+    return 'healthy'; // No requirement means always healthy
+  }
   const percentage = (currentStock / monthlyRequired) * 100;
   if (percentage >= 50) return 'healthy';
   if (percentage >= 30) return 'warning';
@@ -33,7 +36,11 @@ export const getStockStatus = (currentStock, monthlyRequired) => {
 };
 
 export const getStockPercentage = (currentStock, monthlyRequired) => {
-  return Math.round((currentStock / monthlyRequired) * 100);
+  if (!monthlyRequired || monthlyRequired === 0) {
+    return 100; // No requirement = 100% stock
+  }
+  const percentage = (currentStock / monthlyRequired) * 100;
+  return isNaN(percentage) ? 0 : Math.round(percentage);
 };
 
 export default StatusBadge;

@@ -1,4 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback
+} from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext();
@@ -13,35 +20,40 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // 🔹 Initialize session on first load
   useEffect(() => {
-    // Check for existing session
     const storedToken = localStorage.getItem('token');
     const storedUser = localStorage.getItem('user');
 
-    if (storedToken && storedUser) {
+    if (storedToken) {
       setToken(storedToken);
-      setUser(JSON.parse(storedUser));
       axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
     }
+
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
+
     setLoading(false);
   }, []);
 
+  // 🔹 Login
   const login = useCallback(async (email, password) => {
     try {
       setLoading(true);
-      const response = await axios.post('http://localhost:5000/api/auth/login', {
-        email,
-        password
-      });
+
+      const response = await axios.post(
+        'http://localhost:5000/api/auth/login',
+        { email, password }
+      );
 
       if (response.data.success) {
         const { token: authToken, user: userData } = response.data.data;
 
         localStorage.setItem('token', authToken);
-        localStorage.setItem('authToken', authToken);
         localStorage.setItem('user', JSON.stringify(userData));
 
         setToken(authToken);
@@ -55,28 +67,36 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Login failed');
     } catch (error) {
       console.error('Login error:', error);
-      const message = error.response?.data?.message || error.message || 'Invalid credentials';
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Invalid credentials';
+
       return { success: false, error: message };
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 🔹 Register
   const register = useCallback(async (name, email, password) => {
     try {
       setLoading(true);
-      const response = await axios.post('http://localhost:5000/api/auth/register', {
-        name,
-        email,
-        password,
-        role: 'admin'
-      });
+
+      const response = await axios.post(
+        'http://localhost:5000/api/auth/register',
+        {
+          name,
+          email,
+          password,
+          role: 'admin'
+        }
+      );
 
       if (response.data.success) {
         const { token: authToken, user: userData } = response.data.data;
 
         localStorage.setItem('token', authToken);
-        localStorage.setItem('authToken', authToken);
         localStorage.setItem('user', JSON.stringify(userData));
 
         setToken(authToken);
@@ -90,47 +110,64 @@ export const AuthProvider = ({ children }) => {
       throw new Error('Registration failed');
     } catch (error) {
       console.error('Registration error:', error);
-      const message = error.response?.data?.message || error.message || 'Registration failed';
+
+      const message =
+        error.response?.data?.message ||
+        error.message ||
+        'Registration failed';
+
       return { success: false, error: message };
     } finally {
       setLoading(false);
     }
   }, []);
 
+  // 🔹 Logout
   const logout = useCallback(() => {
     localStorage.removeItem('token');
-    localStorage.removeItem('authToken');
     localStorage.removeItem('user');
+
     delete axios.defaults.headers.common['Authorization'];
+
     setToken(null);
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({
-    user,
-    token,
-    login,
-    register,
-    logout,
-    loading,
-    isAuthenticated: !!user && !!token,
-    isAdmin: user?.role === 'admin'
-  }), [user, token, loading]);
+  // 🔹 Auth state
+  const value = useMemo(
+    () => ({
+      user,
+      token,
+      login,
+      register,
+      logout,
+      loading,
+      isAuthenticated: !!token,   // ✅ FIXED: only token determines auth
+      isAdmin: user?.role === 'admin'
+    }),
+    [user, token, loading]
+  );
 
+  // 🔹 Prevent rendering until session check completes
   if (loading) {
     return (
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        fontFamily: 'var(--font-mono)',
-        color: 'var(--color-steel-600)'
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          height: '100vh',
+          fontFamily: 'monospace'
+        }}
+      >
         Loading...
       </div>
     );
   }
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

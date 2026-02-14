@@ -8,7 +8,7 @@ const getAllPCBs = async (req, res) => {
     const client = await pool.connect();
     try {
         const result = await client.query(
-            `SELECT id, pcb_name, created_at 
+            `SELECT id, pcb_name, revision, description, created_at 
        FROM pcbs 
        ORDER BY created_at DESC`
         );
@@ -40,7 +40,7 @@ const getPCBById = async (req, res) => {
         const { id } = req.params;
 
         const result = await client.query(
-            'SELECT id, pcb_name, created_at FROM pcbs WHERE id = $1',
+            'SELECT id, pcb_name, revision, description, created_at FROM pcbs WHERE id = $1',
             [id]
         );
 
@@ -74,7 +74,7 @@ const getPCBById = async (req, res) => {
 const createPCB = async (req, res) => {
     const client = await pool.connect();
     try {
-        const { pcb_name } = req.body;
+        const { pcb_name, revision, description } = req.body;
 
         // Validation
         if (!pcb_name) {
@@ -99,10 +99,10 @@ const createPCB = async (req, res) => {
 
         // Insert PCB
         const result = await client.query(
-            `INSERT INTO pcbs (pcb_name) 
-       VALUES ($1) 
-       RETURNING id, pcb_name, created_at`,
-            [pcb_name]
+            `INSERT INTO pcbs (pcb_name, revision, description) 
+       VALUES ($1, $2, $3) 
+       RETURNING id, pcb_name, revision, description, created_at`,
+            [pcb_name, revision || null, description || null]
         );
 
         res.status(201).json({
