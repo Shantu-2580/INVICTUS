@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, Link } from 'react-router-dom';
 import { Cpu, Lock, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/Button';
@@ -8,7 +8,7 @@ import './Login.css';
 
 const Login = () => {
   const { login, isAuthenticated } = useAuth();
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,20 +18,20 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (!username || !password) {
-      toast.error('Please enter both username and password');
+
+    if (!email || !password) {
+      toast.error('Please enter both email and password');
       return;
     }
 
     setLoading(true);
-    const result = await login(username, password);
+    const result = await login(email, password);
     setLoading(false);
 
     if (result.success) {
       toast.success('Login successful');
     } else {
-      toast.error('Invalid credentials');
+      toast.error(result.error || 'Invalid credentials');
     }
   };
 
@@ -50,14 +50,14 @@ const Login = () => {
           <div className="form-group">
             <label className="form-label">
               <User size={16} />
-              Username
+              Email
             </label>
             <input
-              type="text"
+              type="email"
               className="form-input"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter username"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Enter your email"
               autoFocus
             />
           </div>
@@ -76,10 +76,10 @@ const Login = () => {
             />
           </div>
 
-          <Button 
-            type="submit" 
-            variant="primary" 
-            size="lg" 
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
             loading={loading}
             className="login-button"
           >
@@ -88,17 +88,20 @@ const Login = () => {
         </form>
 
         <div className="login-demo">
-          <p className="demo-title">Demo Credentials</p>
+          <p className="demo-title">First Time Setup</p>
           <div className="demo-credentials">
             <div className="demo-item">
-              <span className="demo-label">Admin:</span>
-              <code>admin / admin</code>
+              <span className="demo-label">Step 1:</span>
+              <code>Register an account</code>
             </div>
             <div className="demo-item">
-              <span className="demo-label">Viewer:</span>
-              <code>viewer / viewer</code>
+              <span className="demo-label">Step 2:</span>
+              <code>All users get admin access</code>
             </div>
           </div>
+          <Link to="/register" style={{ display: 'block', marginTop: '1rem', textAlign: 'center', color: 'var(--color-primary-500)', textDecoration: 'none' }}>
+            Don't have an account? Register here
+          </Link>
         </div>
       </div>
     </div>

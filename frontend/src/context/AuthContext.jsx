@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext();
@@ -29,55 +29,93 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (username, password) => {
+  const login = useCallback(async (email, password) => {
     try {
-      // Simulated API call - replace with actual endpoint
-      // const response = await axios.post('/api/auth/login', { username, password });
-      
-      // Demo authentication
-      if (username && password) {
-        const mockToken = 'mock-jwt-token-' + Date.now();
-        const mockUser = {
-          id: 1,
-          username,
-          role: username === 'admin' ? 'admin' : 'viewer',
-          name: username === 'admin' ? 'System Administrator' : 'Viewer User'
-        };
+      setLoading(true);
+      const response = await axios.post('http://localhost:5000/api/auth/login', {
+        email,
+        password
+      });
 
-        localStorage.setItem('token', mockToken);
-        localStorage.setItem('user', JSON.stringify(mockUser));
-        
-        setToken(mockToken);
-        setUser(mockUser);
-        
-        axios.defaults.headers.common['Authorization'] = `Bearer ${mockToken}`;
-        
-        return { success: true, user: mockUser };
+      if (response.data.success) {
+        const { token: authToken, user: userData } = response.data.data;
+
+        localStorage.setItem('token', authToken);
+        localStorage.setItem('authToken', authToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+
+        setToken(authToken);
+        setUser(userData);
+
+        axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+
+        return { success: true, user: userData };
       }
-      
-      throw new Error('Invalid credentials');
+
+      throw new Error('Login failed');
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, error: error.message };
+      const message = error.response?.data?.message || error.message || 'Invalid credentials';
+      return { success: false, error: message };
+    } finally {
+      setLoading(false);
     }
-  };
+  }, []);
 
-  const logout = () => {
+  const register = useCallback(async (name, email, password) => {
+    try {
+      setLoading(true);
+      const response = await axios.post('http://localhost:5000/api/auth/register', {
+        name,
+        email,
+        password,
+        role: 'admin'
+      });
+
+      if (response.data.success) {
+        const { token: authToken, user: userData } = response.data.data;
+
+        localStorage.setItem('token', authToken);
+        localStorage.setItem('authToken', authToken);
+        localStorage.setItem('user', JSON.stringify(userData));
+
+        setToken(authToken);
+        setUser(userData);
+
+        axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+
+        return { success: true, user: userData };
+      }
+
+      throw new Error('Registration failed');
+    } catch (error) {
+      console.error('Registration error:', error);
+      const message = error.response?.data?.message || error.message || 'Registration failed';
+      return { success: false, error: message };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const logout = useCallback(() => {
     localStorage.removeItem('token');
+    localStorage.removeItem('authToken');
     localStorage.removeItem('user');
     delete axios.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
-  };
+  }, []);
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     token,
     login,
+    register,
     logout,
-    isAuthenticated: !!token,
+    loading,
+    isAuthenticated: !!user && !!token,
     isAdmin: user?.role === 'admin'
-  };
+  }), [user, token, loading]);
 
   if (loading) {
     return (

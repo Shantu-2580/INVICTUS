@@ -1,269 +1,385 @@
-// Mock API Service for Demo
-// Replace with actual API endpoints in production
+// Real API Service - Connects to Backend
+const API_BASE_URL = 'http://localhost:5000/api';
 
-class MockAPI {
+class RealAPI {
   constructor() {
-    this.initializeData();
+    this.token = localStorage.getItem('authToken');
   }
 
-  initializeData() {
-    // Initialize with demo data if not exists
-    if (!localStorage.getItem('components')) {
-      const components = [
-        { id: 1, name: 'ATmega328P', partNumber: 'ATMEGA328P-PU', currentStock: 450, monthlyRequired: 500, category: 'Microcontroller' },
-        { id: 2, name: 'ESP32-WROOM-32', partNumber: 'ESP32-WROOM-32D', currentStock: 120, monthlyRequired: 200, category: 'Wireless Module' },
-        { id: 3, name: 'Resistor 10K 0805', partNumber: 'RC0805FR-0710KL', currentStock: 8500, monthlyRequired: 5000, category: 'Passive' },
-        { id: 4, name: 'Capacitor 100nF 0805', partNumber: 'CL21B104KBCNNNC', currentStock: 7200, monthlyRequired: 6000, category: 'Passive' },
-        { id: 5, name: 'LED Red 0805', partNumber: 'LTST-C150KRKT', currentStock: 45, monthlyRequired: 1000, category: 'LED' },
-        { id: 6, name: 'LM7805 Voltage Regulator', partNumber: 'LM7805CT', currentStock: 280, monthlyRequired: 300, category: 'Power' },
-        { id: 7, name: 'Crystal 16MHz', partNumber: 'ABM8-16.000MHZ-B2-T', currentStock: 190, monthlyRequired: 250, category: 'Timing' },
-        { id: 8, name: 'Capacitor 22pF 0805', partNumber: 'GRM2165C1H220JA01D', currentStock: 3800, monthlyRequired: 500, category: 'Passive' },
-      ];
-      localStorage.setItem('components', JSON.stringify(components));
+  // Helper method to get headers with auth token
+  getHeaders(includeAuth = true) {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (includeAuth && this.token) {
+      headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    if (!localStorage.getItem('pcbs')) {
-      const pcbs = [
-        { id: 1, name: 'Arduino UNO Clone', revision: 'v3.1', description: 'ATmega328P based development board' },
-        { id: 2, name: 'IoT Sensor Node', revision: 'v2.0', description: 'ESP32-based wireless sensor platform' },
-        { id: 3, name: 'Power Supply Board', revision: 'v1.5', description: '5V/12V dual output power supply' },
-      ];
-      localStorage.setItem('pcbs', JSON.stringify(pcbs));
+    return headers;
+  }
+
+  // Helper method to handle responses
+  async handleResponse(response) {
+    const data = await response.json();
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        // Token expired or invalid
+        this.logout();
+        throw new Error('Authentication required. Please login again.');
+      }
+      throw new Error(data.message || 'API request failed');
     }
 
-    if (!localStorage.getItem('boms')) {
-      const boms = [
-        { id: 1, pcbId: 1, componentId: 1, quantity: 1 },
-        { id: 2, pcbId: 1, componentId: 3, quantity: 10 },
-        { id: 3, pcbId: 1, componentId: 4, quantity: 5 },
-        { id: 4, pcbId: 1, componentId: 7, quantity: 1 },
-        { id: 5, pcbId: 2, componentId: 2, quantity: 1 },
-        { id: 6, pcbId: 2, componentId: 3, quantity: 8 },
-        { id: 7, pcbId: 2, componentId: 4, quantity: 6 },
-        { id: 8, pcbId: 2, componentId: 5, quantity: 2 },
-      ];
-      localStorage.setItem('boms', JSON.stringify(boms));
+    return data;
+  }
+
+  // Authentication
+  async login(email, password) {
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await this.handleResponse(response);
+
+    if (data.success && data.data.token) {
+      this.token = data.data.token;
+      localStorage.setItem('authToken', this.token);
+      localStorage.setItem('user', JSON.stringify(data.data.user));
     }
 
-    if (!localStorage.getItem('productions')) {
-      const productions = [];
-      localStorage.setItem('productions', JSON.stringify(productions));
+    return data;
+  }
+
+  async register(name, email, password) {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      method: 'POST',
+      headers: this.getHeaders(false),
+      body: JSON.stringify({ name, email, password, role: 'admin' })
+    });
+
+    const data = await this.handleResponse(response);
+
+    if (data.success && data.data.token) {
+      this.token = data.data.token;
+      localStorage.setItem('authToken', this.token);
+      localStorage.setItem('user', JSON.stringify(data.data.user));
     }
 
-    if (!localStorage.getItem('procurements')) {
-      const procurements = [];
-      localStorage.setItem('procurements', JSON.stringify(procurements));
-    }
+    return data;
+  }
+
+  async getProfile() {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      headers: this.getHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  logout() {
+    this.token = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
   }
 
   // Components
   async getComponents() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const components = JSON.parse(localStorage.getItem('components') || '[]');
-        resolve(components);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/components`, {
+      headers: this.getHeaders()
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.components || [];
   }
 
   async addComponent(component) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const components = JSON.parse(localStorage.getItem('components') || '[]');
-        const newComponent = {
-          ...component,
-          id: Date.now()
-        };
-        components.push(newComponent);
-        localStorage.setItem('components', JSON.stringify(components));
-        resolve(newComponent);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/components`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        name: component.name,
+        part_number: component.partNumber,
+        current_stock: component.currentStock,
+        monthly_required_quantity: component.monthlyRequired
+      })
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.component;
   }
 
   async updateComponent(id, updates) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const components = JSON.parse(localStorage.getItem('components') || '[]');
-        const index = components.findIndex(c => c.id === id);
-        if (index !== -1) {
-          components[index] = { ...components[index], ...updates };
-          localStorage.setItem('components', JSON.stringify(components));
-          resolve(components[index]);
-        }
-        resolve(null);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/components/${id}`, {
+      method: 'PUT',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        name: updates.name,
+        part_number: updates.partNumber,
+        current_stock: updates.currentStock,
+        monthly_required_quantity: updates.monthlyRequired
+      })
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.component;
   }
 
   async deleteComponent(id) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let components = JSON.parse(localStorage.getItem('components') || '[]');
-        components = components.filter(c => c.id !== id);
-        localStorage.setItem('components', JSON.stringify(components));
-        resolve(true);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/components/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
     });
+
+    await this.handleResponse(response);
+    return true;
   }
 
   // PCBs
   async getPCBs() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const pcbs = JSON.parse(localStorage.getItem('pcbs') || '[]');
-        resolve(pcbs);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/pcbs`, {
+      headers: this.getHeaders()
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.pcbs || [];
   }
 
   async addPCB(pcb) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const pcbs = JSON.parse(localStorage.getItem('pcbs') || '[]');
-        const newPCB = {
-          ...pcb,
-          id: Date.now()
-        };
-        pcbs.push(newPCB);
-        localStorage.setItem('pcbs', JSON.stringify(pcbs));
-        resolve(newPCB);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/pcbs`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        pcb_name: pcb.name
+      })
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.pcb;
+  }
+
+  async deletePCB(id) {
+    const response = await fetch(`${API_BASE_URL}/pcbs/${id}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
+    });
+
+    await this.handleResponse(response);
+    return true;
   }
 
   // BOMs
   async getBOMs() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const boms = JSON.parse(localStorage.getItem('boms') || '[]');
-        resolve(boms);
-      }, 300);
-    });
+    const pcbs = await this.getPCBs();
+    const allBOMs = [];
+
+    for (const pcb of pcbs) {
+      const response = await fetch(`${API_BASE_URL}/pcbs/${pcb.id}/components`, {
+        headers: this.getHeaders()
+      });
+
+      const data = await this.handleResponse(response);
+      const components = data.data.components || [];
+
+      components.forEach(comp => {
+        allBOMs.push({
+          id: comp.mapping_id,
+          pcbId: pcb.id,
+          componentId: comp.component_id,
+          quantity: comp.quantity_per_pcb
+        });
+      });
+    }
+
+    return allBOMs;
   }
 
   async addBOM(bom) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const boms = JSON.parse(localStorage.getItem('boms') || '[]');
-        const newBOM = {
-          ...bom,
-          id: Date.now()
-        };
-        boms.push(newBOM);
-        localStorage.setItem('boms', JSON.stringify(boms));
-        resolve(newBOM);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/pcbs/${bom.pcbId}/components`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        component_id: bom.componentId,
+        quantity_per_pcb: bom.quantity
+      })
     });
+
+    const data = await this.handleResponse(response);
+    return {
+      id: data.data.mapping.id,
+      pcbId: bom.pcbId,
+      componentId: bom.componentId,
+      quantity: bom.quantity
+    };
   }
 
-  async deleteBOM(id) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        let boms = JSON.parse(localStorage.getItem('boms') || '[]');
-        boms = boms.filter(b => b.id !== id);
-        localStorage.setItem('boms', JSON.stringify(boms));
-        resolve(true);
-      }, 300);
+  async deleteBOM(id, pcbId, componentId) {
+    const response = await fetch(`${API_BASE_URL}/pcbs/${pcbId}/components/${componentId}`, {
+      method: 'DELETE',
+      headers: this.getHeaders()
     });
+
+    await this.handleResponse(response);
+    return true;
   }
 
   // Productions
   async getProductions() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const productions = JSON.parse(localStorage.getItem('productions') || '[]');
-        resolve(productions);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/production`, {
+      headers: this.getHeaders()
     });
+
+    const data = await this.handleResponse(response);
+    return (data.data.productionLogs || []).map(log => ({
+      id: log.id,
+      pcbId: log.pcb_id,
+      pcbName: log.pcb_name,
+      quantity: log.quantity_produced,
+      timestamp: log.produced_at
+    }));
   }
 
   async addProduction(production) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const productions = JSON.parse(localStorage.getItem('productions') || '[]');
-        const components = JSON.parse(localStorage.getItem('components') || '[]');
-        const boms = JSON.parse(localStorage.getItem('boms') || '[]');
-
-        // Deduct stock
-        const pcbBoms = boms.filter(b => b.pcbId === production.pcbId);
-        pcbBoms.forEach(bom => {
-          const compIndex = components.findIndex(c => c.id === bom.componentId);
-          if (compIndex !== -1) {
-            components[compIndex].currentStock -= bom.quantity * production.quantity;
-          }
-        });
-
-        const newProduction = {
-          ...production,
-          id: Date.now(),
-          timestamp: new Date().toISOString()
-        };
-
-        productions.push(newProduction);
-        localStorage.setItem('productions', JSON.stringify(productions));
-        localStorage.setItem('components', JSON.stringify(components));
-        
-        // Generate procurement alerts for low stock
-        this.checkAndGenerateProcurementAlerts(components);
-        
-        resolve(newProduction);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/production`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        pcb_id: production.pcbId,
+        quantity_produced: production.quantity
+      })
     });
-  }
 
-  checkAndGenerateProcurementAlerts(components) {
-    const procurements = JSON.parse(localStorage.getItem('procurements') || '[]');
-    
-    components.forEach(component => {
-      const stockPercentage = (component.currentStock / component.monthlyRequired) * 100;
-      if (stockPercentage < 30) {
-        // Check if alert already exists
-        const existingAlert = procurements.find(
-          p => p.componentId === component.id && p.status === 'open'
-        );
-        
-        if (!existingAlert) {
-          procurements.push({
-            id: Date.now() + component.id,
-            componentId: component.id,
-            currentStock: component.currentStock,
-            threshold: component.monthlyRequired * 0.3,
-            triggerDate: new Date().toISOString(),
-            status: 'open',
-            notes: ''
-          });
-        }
-      }
-    });
-    
-    localStorage.setItem('procurements', JSON.stringify(procurements));
+    const data = await this.handleResponse(response);
+    return {
+      id: data.data.productionLog.id,
+      pcbId: data.data.productionLog.pcb_id,
+      pcbName: data.data.pcb_name,
+      quantity: data.data.productionLog.quantity_produced,
+      timestamp: data.data.productionLog.produced_at
+    };
   }
 
   // Procurements
   async getProcurements() {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const procurements = JSON.parse(localStorage.getItem('procurements') || '[]');
-        resolve(procurements);
-      }, 300);
+    const response = await fetch(`${API_BASE_URL}/analytics/procurement-alerts?status=open`, {
+      headers: this.getHeaders()
     });
+
+    const data = await this.handleResponse(response);
+    return (data.data.procurementAlerts || []).map(alert => ({
+      id: alert.id,
+      componentId: alert.component_id,
+      componentName: alert.component_name,
+      currentStock: alert.current_stock,
+      threshold: alert.monthly_required_quantity * 0.2,
+      triggerDate: alert.trigger_date,
+      status: alert.status,
+      notes: ''
+    }));
   }
 
   async updateProcurement(id, updates) {
-    return new Promise(resolve => {
-      setTimeout(() => {
-        const procurements = JSON.parse(localStorage.getItem('procurements') || '[]');
-        const index = procurements.findIndex(p => p.id === id);
-        if (index !== -1) {
-          procurements[index] = { ...procurements[index], ...updates };
-          localStorage.setItem('procurements', JSON.stringify(procurements));
-          resolve(procurements[index]);
-        }
-        resolve(null);
-      }, 300);
+    if (updates.status === 'resolved') {
+      const response = await fetch(`${API_BASE_URL}/analytics/procurement-alerts/${id}/resolve`, {
+        method: 'PUT',
+        headers: this.getHeaders()
+      });
+
+      const data = await this.handleResponse(response);
+      return data.data.procurementAlert;
+    }
+    return null;
+  }
+
+  // Analytics
+  async getConsumptionSummary(startDate, endDate) {
+    let url = `${API_BASE_URL}/analytics/consumption-summary`;
+    if (startDate && endDate) {
+      url += `?startDate=${startDate}&endDate=${endDate}`;
+    }
+
+    const response = await fetch(url, {
+      headers: this.getHeaders()
     });
+
+    const data = await this.handleResponse(response);
+    return data.data.consumptionSummary || [];
+  }
+
+  async getTopConsumed(limit = 10) {
+    const response = await fetch(`${API_BASE_URL}/analytics/top-consumed?limit=${limit}`, {
+      headers: this.getHeaders()
+    });
+
+    const data = await this.handleResponse(response);
+    return data.data.topComponents || [];
+  }
+
+  async getLowStock() {
+    const response = await fetch(`${API_BASE_URL}/analytics/low-stock`, {
+      headers: this.getHeaders()
+    });
+
+    const data = await this.handleResponse(response);
+    return data.data.lowStockComponents || [];
+  }
+
+  async getProductionStats(startDate, endDate) {
+    let url = `${API_BASE_URL}/analytics/production-stats`;
+    if (startDate && endDate) {
+      url += `?startDate=${startDate}&endDate=${endDate}`;
+    }
+
+    const response = await fetch(url, {
+      headers: this.getHeaders()
+    });
+
+    const data = await this.handleResponse(response);
+    return data.data.productionStats || [];
+  }
+
+  // Excel Import
+  async getImportFiles() {
+    const response = await fetch(`${API_BASE_URL}/import/files`, {
+      headers: this.getHeaders()
+    });
+
+    const data = await this.handleResponse(response);
+    return data.data.files || [];
+  }
+
+  async previewExcelFile(filename) {
+    const response = await fetch(`${API_BASE_URL}/import/preview/${encodeURIComponent(filename)}`, {
+      headers: this.getHeaders()
+    });
+
+    return this.handleResponse(response);
+  }
+
+  async importExcelData(filename, sheetName, importType = 'auto') {
+    const response = await fetch(`${API_BASE_URL}/import/excel`, {
+      method: 'POST',
+      headers: this.getHeaders(),
+      body: JSON.stringify({ filename, sheetName, importType })
+    });
+
+    return this.handleResponse(response);
+  }
+
+  // Check if user is authenticated
+  isAuthenticated() {
+    return !!this.token;
+  }
+
+  // Get current user
+  getCurrentUser() {
+    const userStr = localStorage.getItem('user');
+    return userStr ? JSON.parse(userStr) : null;
   }
 }
 
-export const api = new MockAPI();
+export const api = new RealAPI();
