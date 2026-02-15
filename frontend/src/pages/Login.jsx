@@ -88,18 +88,8 @@ const Login = () => {
         </form>
 
         <div className="login-demo">
-          <p className="demo-title">First Time Setup</p>
-          <div className="demo-credentials">
-            <div className="demo-item">
-              <span className="demo-label">Step 1:</span>
-              <code>Register an account</code>
-            </div>
-            <div className="demo-item">
-              <span className="demo-label">Step 2:</span>
-              <code>All users get admin access</code>
-            </div>
-          </div>
-          <Link to="/register" style={{ display: 'block', marginTop: '1rem', textAlign: 'center', color: 'var(--color-primary-500)', textDecoration: 'none' }}>
+          <p className="demo-title">New User?</p>
+          <Link to="/register" style={{ display: 'block', marginTop: '1rem', textAlign: 'center', color: 'var(--color-primary-500)', textDecoration: 'none', fontSize: '1rem' }}>
             Don't have an account? Register here
           </Link>
         </div>

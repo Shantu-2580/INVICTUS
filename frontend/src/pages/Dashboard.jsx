@@ -4,7 +4,9 @@ import {
   AlertTriangle,
   Cpu,
   Factory,
-  ShoppingCart
+  ShoppingCart,
+  CheckCircle,
+  XCircle
 } from 'lucide-react';
 import Layout from '../components/Layout';
 import Card from '../components/Card';
@@ -125,6 +127,25 @@ const Dashboard = () => {
       .slice(0, 5);
   }, [productions]);
 
+  // Calculate total OK and SCRAP pieces
+  const productionStats = useMemo(() => {
+    let totalOk = 0;
+    let totalScrap = 0;
+    let totalProduced = 0;
+
+    productions.forEach(p => {
+      totalProduced += Number(p.quantity || 0);
+      totalOk += Number(p.quantityOk || 0);
+      totalScrap += Number(p.quantityScrap || 0);
+    });
+
+    const successRate = totalProduced > 0
+      ? ((totalOk / totalProduced) * 100).toFixed(1)
+      : 0;
+
+    return { totalOk, totalScrap, totalProduced, successRate };
+  }, [productions]);
+
   /* ================= SAFE TABLE CONFIG ================= */
 
   const productionColumns = [
@@ -134,13 +155,54 @@ const Dashboard = () => {
       render: row => row.pcbName || 'Unknown'
     },
     {
-      header: 'Quantity',
+      header: 'Total',
       accessor: 'quantity',
       render: row => (
         <span className="mono">
           {Number(row.quantity ?? 0)} units
         </span>
       )
+    },
+    {
+      header: 'OK',
+      accessor: 'quantityOk',
+      render: row => (
+        <span className="mono" style={{ color: '#10b981' }}>
+          {row.quantityOk !== null && row.quantityOk !== undefined
+            ? Number(row.quantityOk)
+            : '—'}
+        </span>
+      )
+    },
+    {
+      header: 'Faulty',
+      accessor: 'quantityScrap',
+      render: row => (
+        <span className="mono" style={{ color: '#ef4444' }}>
+          {row.quantityScrap !== null && row.quantityScrap !== undefined
+            ? Number(row.quantityScrap)
+            : '—'}
+        </span>
+      )
+    },
+    {
+      header: 'Success Rate',
+      accessor: 'successRate',
+      render: row => {
+        if (row.quantityOk === null || row.quantityOk === undefined) {
+          return <span>—</span>;
+        }
+        const total = Number(row.quantity || 0);
+        const ok = Number(row.quantityOk || 0);
+        const rate = total > 0 ? ((ok / total) * 100).toFixed(1) : 0;
+        return (
+          <span className="mono" style={{
+            color: rate >= 80 ? '#10b981' : rate >= 60 ? '#f59e0b' : '#ef4444'
+          }}>
+            {rate}%
+          </span>
+        );
+      }
     },
     {
       header: 'Timestamp',
@@ -221,6 +283,26 @@ const Dashboard = () => {
             <Factory size={20} />
             <div>{loading ? '—' : productions.length}</div>
             <span>Production Entries</span>
+          </div>
+
+          <div className="kpi-card">
+            <CheckCircle size={20} />
+            <div>{loading ? '—' : productionStats.totalOk.toLocaleString()}</div>
+            <span>Healthy Pieces</span>
+          </div>
+
+          <div className="kpi-card">
+            <XCircle size={20} />
+            <div>{loading ? '—' : productionStats.totalScrap.toLocaleString()}</div>
+            <span>Faulty Pieces</span>
+          </div>
+
+          <div className="kpi-card" style={{ gridColumn: 'span 2' }}>
+            <Factory size={20} />
+            <div style={{ color: productionStats.successRate >= 80 ? '#10b981' : productionStats.successRate >= 60 ? '#f59e0b' : '#ef4444' }}>
+              {loading ? '—' : `${productionStats.successRate}%`}
+            </div>
+            <span>Overall Success Rate</span>
           </div>
 
           <div className="kpi-card">

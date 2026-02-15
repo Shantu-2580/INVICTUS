@@ -13,6 +13,8 @@ const getAllProductionLogs = async (req, res) => {
          pl.pcb_id,
          p.pcb_name,
          pl.quantity_produced,
+         pl.quantity_ok,
+         pl.quantity_scrap,
          pl.produced_at
        FROM production_logs pl
        JOIN pcbs p ON pl.pcb_id = p.id
@@ -44,7 +46,7 @@ const recordProduction = async (req, res) => {
     const client = await pool.connect();
 
     try {
-        const { pcb_id, quantity_produced } = req.body;
+        const { pcb_id, quantity_produced, quantity_ok, quantity_scrap } = req.body;
 
         // Validation
         if (!pcb_id || !quantity_produced) {
@@ -59,6 +61,23 @@ const recordProduction = async (req, res) => {
                 success: false,
                 message: 'Quantity produced must be greater than 0'
             });
+        }
+
+        // Validate OK/SCRAP breakdown if provided
+        if (quantity_ok !== undefined && quantity_scrap !== undefined) {
+            if (quantity_ok < 0 || quantity_scrap < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'quantity_ok and quantity_scrap must be non-negative'
+                });
+            }
+
+            if (quantity_ok + quantity_scrap !== quantity_produced) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'quantity_ok + quantity_scrap must equal quantity_produced'
+                });
+            }
         }
 
         // START TRANSACTION
@@ -142,10 +161,10 @@ const recordProduction = async (req, res) => {
 
         // 5. Insert production log
         const productionLogResult = await client.query(
-            `INSERT INTO production_logs (pcb_id, quantity_produced) 
-       VALUES ($1, $2) 
-       RETURNING id, pcb_id, quantity_produced, produced_at`,
-            [pcb_id, quantity_produced]
+            `INSERT INTO production_logs (pcb_id, quantity_produced, quantity_ok, quantity_scrap) 
+       VALUES ($1, $2, $3, $4) 
+       RETURNING id, pcb_id, quantity_produced, quantity_ok, quantity_scrap, produced_at`,
+            [pcb_id, quantity_produced, quantity_ok || null, quantity_scrap || null]
         );
 
         const productionLog = productionLogResult.rows[0];
@@ -246,6 +265,8 @@ const getProductionLogById = async (req, res) => {
          pl.pcb_id,
          p.pcb_name,
          pl.quantity_produced,
+         pl.quantity_ok,
+         pl.quantity_scrap,
          pl.produced_at
        FROM production_logs pl
        JOIN pcbs p ON pl.pcb_id = p.id

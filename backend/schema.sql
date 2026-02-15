@@ -9,7 +9,7 @@ CREATE TABLE users (
     name VARCHAR(255) NOT NULL,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
-    role VARCHAR(50) DEFAULT 'admin',
+    role VARCHAR(50) DEFAULT 'user',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -61,7 +61,14 @@ CREATE TABLE production_logs (
     id SERIAL PRIMARY KEY,
     pcb_id INTEGER NOT NULL REFERENCES pcbs(id) ON DELETE RESTRICT,
     quantity_produced INTEGER NOT NULL CHECK (quantity_produced > 0),
-    produced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    quantity_ok INTEGER CHECK (quantity_ok >= 0),
+    quantity_scrap INTEGER CHECK (quantity_scrap >= 0),
+    produced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT check_quantity_sum CHECK (
+        quantity_ok IS NULL 
+        OR quantity_scrap IS NULL 
+        OR quantity_produced = quantity_ok + quantity_scrap
+    )
 );
 
 -- Index for production queries

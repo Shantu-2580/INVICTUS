@@ -9,7 +9,7 @@ const pool = require('../config/db');
 const register = async (req, res) => {
     const client = await pool.connect();
     try {
-        const { name, email, password, role = 'admin' } = req.body;
+        const { name, email, password, role = 'user' } = req.body;
 
         // Validation
         if (!name || !email || !password) {
